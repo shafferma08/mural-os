@@ -1,0 +1,687 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>MuralOS</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; background: #0a0a0a; color: #fff; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; overscroll-behavior: none; line-height: 1.5; }
+  body { display: flex; align-items: stretch; justify-content: center; }
+
+  #app { width: 100%; max-width: 440px; min-height: 100vh; min-height: 100dvh; background: #0a0a0a; position: relative; overflow: hidden; display: flex; flex-direction: column; }
+
+  /* Screen container - now flex column with sticky footer pattern */
+  .screen { position: absolute; inset: 0; display: none; flex-direction: column; overflow-y: auto; overscroll-behavior: contain; padding: 28px 24px 24px; padding-bottom: calc(24px + env(safe-area-inset-bottom)); }
+  .screen.active { display: flex; animation: slideIn 0.3s ease-out; }
+  @keyframes slideIn { from { transform: translateX(20px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+
+  /* Sticky button row - fixes the overlap bug */
+  .btn-row {
+    position: sticky;
+    bottom: 0;
+    margin: 24px -24px calc(-24px - env(safe-area-inset-bottom));
+    padding: 16px 24px calc(16px + env(safe-area-inset-bottom));
+    display: flex; gap: 12px;
+    background: linear-gradient(to bottom, rgba(10,10,10,0) 0%, #0a0a0a 24px);
+    z-index: 10;
+  }
+  .btn-row .btn { flex: 1; }
+  .btn-row .btn.secondary { flex: 0 0 auto; }
+  /* Push content to top when sticky footer is present */
+  .screen-content { flex: 1 0 auto; }
+
+  /* Progress */
+  .progress { display: flex; gap: 4px; margin-bottom: 32px; }
+  .progress span { flex: 1; height: 4px; background: #2a2a2a; border-radius: 2px; }
+  .progress span.done { background: #e1251b; }
+  .progress span.current { background: #fff; box-shadow: 0 0 10px rgba(255,255,255,0.5); }
+
+  /* Headers */
+  h1 { font-size: 32px; font-weight: 800; line-height: 1.1; letter-spacing: -0.5px; margin-bottom: 8px; }
+  h2 { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: #888; margin: 28px 0 12px; }
+  .subtitle { font-size: 16px; color: #999; margin-bottom: 24px; line-height: 1.4; }
+
+  /* Buttons */
+  .btn { background: #e1251b; color: #fff; border: none; font-size: 17px; font-weight: 600; padding: 18px 24px; border-radius: 12px; cursor: pointer; width: 100%; transition: transform 0.1s, background 0.2s; font-family: inherit; min-height: 56px; }
+  .btn:active { transform: scale(0.98); background: #c41e15; }
+  .btn:disabled { background: #2a2a2a; color: #777; cursor: not-allowed; }
+  .btn.secondary { background: transparent; color: #888; border: none; padding: 18px 16px; font-weight: 500; }
+  .btn.secondary:active { color: #fff; transform: scale(0.98); }
+  .btn.outline { background: #1a1a1a; color: #fff; border: 1px solid #2a2a2a; }
+  .btn.outline:active { background: #222; }
+
+  /* Inputs */
+  .input-group { margin-bottom: 16px; }
+  .input-group label { display: block; font-size: 12px; color: #888; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.6px; font-weight: 600; }
+  .input-group input, .input-group select { width: 100%; background: #1a1a1a; color: #fff; border: 1px solid #2a2a2a; border-radius: 10px; padding: 16px; font-size: 17px; font-family: inherit; }
+  .input-group input:focus, .input-group select:focus { outline: none; border-color: #e1251b; }
+  .input-group input.error { border-color: #e1251b; }
+  .input-row { display: flex; gap: 12px; }
+  .input-row .input-group { flex: 1; }
+  .field-error { color: #ff6b6b; font-size: 13px; margin-top: 6px; min-height: 18px; }
+
+  /* Custom select chevron */
+  select { appearance: none; -webkit-appearance: none; background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16' fill='none'><path d='M4 6l4 4 4-4' stroke='%23888' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/></svg>"); background-repeat: no-repeat; background-position: right 16px center; padding-right: 44px !important; }
+
+  /* Upload zones */
+  .upload-zone { background: #141414; border: 2px dashed #333; border-radius: 16px; padding: 48px 24px; text-align: center; cursor: pointer; transition: border-color 0.2s, background 0.2s; margin-bottom: 24px; min-height: 180px; display: flex; flex-direction: column; justify-content: center; align-items: center; position: relative; }
+  .upload-zone:active { border-color: #e1251b; background: #1a1212; }
+  .upload-zone.filled { border-color: #e1251b; border-style: solid; padding: 12px; }
+  .upload-icon { width: 36px; height: 36px; margin-bottom: 12px; color: #888; }
+  .upload-zone:active .upload-icon { color: #e1251b; }
+  .upload-text { font-size: 14px; color: #aaa; font-weight: 500; }
+  .upload-zone.filled .upload-text, .upload-zone.filled .upload-icon { display: none; }
+  .upload-zone img { max-width: 100%; max-height: 240px; border-radius: 8px; display: none; }
+  .upload-zone.filled img { display: block; }
+  .upload-zone .retake { display: none; position: absolute; top: 16px; right: 16px; background: rgba(0,0,0,0.7); backdrop-filter: blur(8px); color: #fff; padding: 6px 12px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+  .upload-zone.filled .retake { display: block; }
+  .hidden-input { display: none; }
+
+  /* Splash */
+  .splash-content { flex: 1; display: flex; flex-direction: column; justify-content: center; text-align: center; }
+  .logo { font-size: 64px; font-weight: 900; letter-spacing: -2.5px; line-height: 1; margin-bottom: 12px; }
+  .logo span.os { color: #e1251b; }
+  .splash-tag { font-size: 19px; color: #aaa; margin-bottom: 40px; line-height: 1.35; max-width: 300px; margin-left: auto; margin-right: auto; }
+  .splash-features { display: flex; gap: 8px; margin-bottom: 32px; justify-content: center; flex-wrap: wrap; }
+  .splash-features span { font-size: 13px; color: #fff; padding: 8px 14px; background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 999px; font-weight: 500; }
+  .splash-features span b { color: #e1251b; margin-right: 6px; font-weight: 700; }
+  .splash-footer { text-align: center; color: #666; font-size: 12px; margin-top: 24px; }
+
+  /* Preview canvas */
+  .preview-wrap { background: #141414; border-radius: 16px; padding: 16px; margin-bottom: 20px; position: relative; }
+  .preview-canvas { display: block; width: 100%; max-height: 360px; object-fit: contain; border-radius: 8px; }
+  .canvas-reset { position: absolute; top: 24px; right: 24px; background: rgba(0,0,0,0.6); backdrop-filter: blur(8px); color: #fff; padding: 6px 12px; border-radius: 999px; font-size: 12px; font-weight: 600; border: none; cursor: pointer; font-family: inherit; }
+
+  /* Sliders - improved with filled progress */
+  .preview-controls { display: flex; flex-direction: column; gap: 16px; margin-bottom: 8px; }
+  .slider-group label { display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: #888; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.6px; font-weight: 600; }
+  .slider-group label .v { color: #fff; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .slider-group input[type="range"] { width: 100%; height: 28px; padding: 0; -webkit-appearance: none; appearance: none; background: linear-gradient(to right, #e1251b 0%, #e1251b var(--fill, 50%), #2a2a2a var(--fill, 50%), #2a2a2a 100%); border-radius: 4px; }
+  .slider-group input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; height: 28px; width: 28px; border-radius: 50%; background: #fff; border: 3px solid #e1251b; box-shadow: 0 2px 8px rgba(0,0,0,0.6); cursor: pointer; }
+  .slider-group input[type="range"]::-moz-range-thumb { height: 28px; width: 28px; border-radius: 50%; background: #fff; border: 3px solid #e1251b; box-shadow: 0 2px 8px rgba(0,0,0,0.6); cursor: pointer; }
+
+  /* Tier cards */
+  .tier-grid { display: flex; flex-direction: column; gap: 10px; margin-bottom: 8px; }
+  .tier-card { background: #141414; border: 2px solid #2a2a2a; border-radius: 12px; padding: 16px 16px 16px 16px; cursor: pointer; transition: all 0.2s; position: relative; }
+  .tier-card:active { transform: scale(0.99); }
+  .tier-card.selected { background: #1f1414; border-color: #e1251b; box-shadow: 0 0 0 4px rgba(225,37,27,0.08), inset 0 0 0 1px rgba(225,37,27,0.3); padding-right: 48px; }
+  .tier-card.selected::after { content: ''; position: absolute; top: 50%; right: 16px; transform: translateY(-50%); width: 22px; height: 22px; border-radius: 50%; background: #e1251b url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 14 14' fill='none'><path d='M3 7l3 3 5-6' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/></svg>") no-repeat center; }
+  .tier-card .tier-name { font-size: 16px; font-weight: 700; margin-bottom: 4px; display: flex; align-items: center; gap: 8px; }
+  .tier-card .tier-desc { font-size: 13px; color: #999; line-height: 1.4; }
+  .tier-card .tier-price { font-size: 12px; color: #fff; opacity: 0.6; margin-top: 6px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; }
+  .suggested-badge { position: absolute; top: 12px; right: 12px; font-size: 10px; background: #e1251b; color: #fff; padding: 3px 8px; border-radius: 4px; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 700; line-height: 1; }
+  .tier-card.selected .suggested-badge { display: none; }
+  .tier-card .why { font-size: 11px; color: #e1251b; margin-top: 4px; font-style: italic; }
+
+  /* Segmented control */
+  .segmented { display: flex; background: #1a1a1a; border-radius: 10px; padding: 4px; margin-bottom: 20px; }
+  .segmented button { flex: 1; background: transparent; border: none; color: #888; font-size: 14px; font-weight: 600; padding: 12px; border-radius: 7px; cursor: pointer; font-family: inherit; transition: all 0.2s; }
+  .segmented button.active { background: #2a2a2a; color: #fff; box-shadow: 0 1px 2px rgba(0,0,0,0.4); }
+
+  /* Price reveal */
+  .price-hero { text-align: center; padding: 24px 0 16px; }
+  .price-label { font-size: 12px; color: #888; text-transform: uppercase; letter-spacing: 1px; font-weight: 600; margin-bottom: 8px; }
+  .price-amount { font-size: 44px; font-weight: 900; letter-spacing: -1.5px; line-height: 1; margin-bottom: 8px; font-variant-numeric: tabular-nums; animation: priceLand 0.6s cubic-bezier(0.34, 1.56, 0.64, 1); }
+  .price-amount .range { color: #e1251b; }
+  .price-sub { font-size: 14px; color: #888; }
+  @keyframes priceLand { 0% { transform: scale(0.7); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+
+  .alt-price { background: #141414; border-radius: 12px; padding: 16px 20px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; }
+  .alt-price-label { font-size: 13px; color: #888; }
+  .alt-price-value { font-size: 17px; font-weight: 700; color: #fff; font-variant-numeric: tabular-nums; }
+
+  /* Collapsible breakdown */
+  .breakdown-toggle { background: transparent; border: 1px solid #2a2a2a; border-radius: 10px; padding: 14px 16px; width: 100%; color: #aaa; font-size: 14px; cursor: pointer; font-family: inherit; display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+  .breakdown-toggle:active { background: #1a1a1a; }
+  .breakdown-toggle .chev { transition: transform 0.2s; }
+  .breakdown-toggle.open .chev { transform: rotate(180deg); }
+  .breakdown { background: #141414; border-radius: 12px; padding: 16px 20px; margin-top: -12px; margin-bottom: 20px; display: none; }
+  .breakdown.open { display: block; }
+  .breakdown-row { display: flex; justify-content: space-between; font-size: 14px; padding: 6px 0; font-variant-numeric: tabular-nums; }
+  .breakdown-row .label { color: #888; }
+  .breakdown-row .value { color: #fff; font-weight: 600; }
+
+  .note { font-size: 13px; color: #999; line-height: 1.5; margin-bottom: 8px; padding: 12px; background: #141414; border-radius: 8px; }
+
+  /* Conversion CTAs */
+  .conversion-cards { display: flex; flex-direction: column; gap: 10px; margin: 16px 0 20px; }
+  .conv-card { background: #141414; border: 1px solid #2a2a2a; border-radius: 12px; padding: 16px; display: flex; align-items: center; gap: 14px; cursor: pointer; transition: all 0.2s; }
+  .conv-card:active { background: #1a1a1a; }
+  .conv-icon { width: 40px; height: 40px; border-radius: 10px; background: #1f1414; display: flex; align-items: center; justify-content: center; flex-shrink: 0; color: #e1251b; }
+  .conv-text { flex: 1; }
+  .conv-title { font-size: 15px; font-weight: 700; margin-bottom: 2px; }
+  .conv-sub { font-size: 12px; color: #888; }
+  .conv-arrow { color: #555; }
+
+  /* Back chevron */
+  .back-btn { background: transparent; border: none; color: #aaa; font-size: 15px; cursor: pointer; padding: 12px 16px; margin: -12px 0 8px -16px; align-self: flex-start; font-family: inherit; font-weight: 500; display: flex; align-items: center; gap: 6px; }
+  .back-btn:active { color: #fff; }
+
+  /* Loading state */
+  .loading-overlay { position: fixed; inset: 0; background: rgba(10,10,10,0.95); backdrop-filter: blur(8px); display: none; align-items: center; justify-content: center; flex-direction: column; gap: 16px; z-index: 100; }
+  .loading-overlay.show { display: flex; }
+  .spinner { width: 32px; height: 32px; border: 3px solid #2a2a2a; border-top-color: #e1251b; border-radius: 50%; animation: spin 0.8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .loading-text { color: #aaa; font-size: 14px; }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- SCREEN 1: SPLASH -->
+  <section class="screen active" data-screen="splash">
+    <div class="splash-content">
+      <div class="logo">Mural<span class="os">OS</span></div>
+      <p class="splash-tag">Get a mural price in 60 seconds.</p>
+      <div class="splash-features">
+        <span><b>01</b>Snap</span>
+        <span><b>02</b>Overlay</span>
+        <span><b>03</b>Price</span>
+      </div>
+    </div>
+    <div class="btn-row">
+      <button class="btn" onclick="go('wall')">Start</button>
+    </div>
+    <p class="splash-footer">Built with current US mural pricing data.</p>
+  </section>
+
+  <!-- SCREEN 2: WALL PHOTO + DIMENSIONS -->
+  <section class="screen" data-screen="wall">
+    <button class="back-btn" onclick="go('splash')">‹ Back</button>
+    <div class="progress"><span class="current"></span><span></span><span></span><span></span><span></span></div>
+    <div class="screen-content">
+      <h1>Your wall</h1>
+      <p class="subtitle">A photo and the size. We will show your mural on it.</p>
+
+      <label class="upload-zone" id="wallZone">
+        <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
+        <div class="upload-text">Tap to add a photo of the wall</div>
+        <img id="wallImg" alt="Wall">
+        <span class="retake">Retake</span>
+        <input type="file" accept="image/*" class="hidden-input" id="wallFile">
+      </label>
+      <div class="field-error" id="wallErr"></div>
+
+      <div class="input-row">
+        <div class="input-group">
+          <label>Width (ft)</label>
+          <input type="number" inputmode="decimal" id="wallWidth" min="1" step="0.5" placeholder="e.g. 20">
+        </div>
+        <div class="input-group">
+          <label>Height (ft)</label>
+          <input type="number" inputmode="decimal" id="wallHeight" min="1" step="0.5" placeholder="e.g. 10">
+        </div>
+      </div>
+      <div class="field-error" id="dimErr"></div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn" onclick="validateAndGo('wall', 'mural')">Next</button>
+    </div>
+  </section>
+
+  <!-- SCREEN 3: MURAL IMAGE -->
+  <section class="screen" data-screen="mural">
+    <button class="back-btn" onclick="go('wall')">‹ Back</button>
+    <div class="progress"><span class="done"></span><span class="current"></span><span></span><span></span><span></span></div>
+    <div class="screen-content">
+      <h1>Your mural idea</h1>
+      <p class="subtitle">Any image works. Your sketch, a photo of a mural you loved, anything from your camera roll.</p>
+
+      <label class="upload-zone" id="muralZone">
+        <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+        <div class="upload-text">Tap to add your mural image</div>
+        <img id="muralImg" alt="Mural">
+        <span class="retake">Replace</span>
+        <input type="file" accept="image/*" class="hidden-input" id="muralFile">
+      </label>
+      <div class="field-error" id="muralErr"></div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn" onclick="validateAndGo('mural', 'preview')">Next</button>
+    </div>
+  </section>
+
+  <!-- SCREEN 4: PREVIEW / OVERLAY -->
+  <section class="screen" data-screen="preview">
+    <button class="back-btn" onclick="go('mural')">‹ Back</button>
+    <div class="progress"><span class="done"></span><span class="done"></span><span class="current"></span><span></span><span></span></div>
+    <div class="screen-content">
+      <h1>Preview</h1>
+      <p class="subtitle">Adjust if needed, or just continue.</p>
+
+      <div class="preview-wrap">
+        <canvas class="preview-canvas" id="previewCanvas"></canvas>
+        <button class="canvas-reset" onclick="resetPreview()">Reset</button>
+      </div>
+
+      <div class="preview-controls">
+        <div class="slider-group">
+          <label>Size <span class="v" id="scaleVal">75%</span></label>
+          <input type="range" id="scaleSlider" min="20" max="100" value="75">
+        </div>
+        <div class="slider-group">
+          <label>Opacity <span class="v" id="opacityVal">85%</span></label>
+          <input type="range" id="opacitySlider" min="20" max="100" value="85">
+        </div>
+        <div class="slider-group">
+          <label>Horizontal <span class="v" id="xVal">center</span></label>
+          <input type="range" id="xSlider" min="0" max="100" value="50">
+        </div>
+        <div class="slider-group">
+          <label>Vertical <span class="v" id="yVal">center</span></label>
+          <input type="range" id="ySlider" min="0" max="100" value="50">
+        </div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn" onclick="go('details')">Continue</button>
+    </div>
+  </section>
+
+  <!-- SCREEN 5: DETAILS (region, complexity) -->
+  <section class="screen" data-screen="details">
+    <button class="back-btn" onclick="go('preview')">‹ Back</button>
+    <div class="progress"><span class="done"></span><span class="done"></span><span class="done"></span><span class="current"></span><span></span></div>
+    <div class="screen-content">
+      <h1>Almost there</h1>
+      <p class="subtitle">Two quick questions, then we show you the number.</p>
+
+      <h2>Where will this be?</h2>
+      <div class="input-group">
+        <select id="regionSelect">
+          <option value="t3">Most US metros (baseline pricing)</option>
+          <option value="t1">SF / NYC / LA (Tier 1, highest cost)</option>
+          <option value="t2">Seattle / Boston / DC / Miami (Tier 2)</option>
+          <option value="t4">Small towns / rural (Tier 4, lower cost)</option>
+        </select>
+      </div>
+
+      <h2>Complexity</h2>
+      <p style="font-size: 13px; color: #888; margin: -8px 0 12px;">We made a suggestion. Tap a different one if it does not match.</p>
+      <div class="tier-grid" id="complexityGrid">
+        <div class="tier-card" data-value="simple">
+          <span class="suggested-badge" id="sugSimple" style="display:none">Suggested</span>
+          <div class="tier-name">Simple</div>
+          <div class="tier-desc">One or two colors, geometric shapes, text or logos.</div>
+          <div class="tier-price">$20/sq ft and up</div>
+        </div>
+        <div class="tier-card" data-value="moderate">
+          <span class="suggested-badge" id="sugModerate" style="display:none">Suggested</span>
+          <div class="tier-name">Moderate</div>
+          <div class="tier-desc">Multi-color, recognizable scenes, medium detail.</div>
+          <div class="tier-price">$30/sq ft and up</div>
+        </div>
+        <div class="tier-card" data-value="detailed">
+          <span class="suggested-badge" id="sugDetailed" style="display:none">Suggested</span>
+          <div class="tier-name">Detailed</div>
+          <div class="tier-desc">Photorealistic, faces, fine gradients, intricate work.</div>
+          <div class="tier-price">$40/sq ft and up</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn" onclick="calculatePrice()">See my price</button>
+    </div>
+  </section>
+
+  <!-- SCREEN 6: PRICE REVEAL -->
+  <section class="screen" data-screen="price">
+    <button class="back-btn" onclick="go('details')">‹ Back</button>
+    <div class="progress"><span class="done"></span><span class="done"></span><span class="done"></span><span class="done"></span><span class="done"></span></div>
+    <div class="screen-content">
+      <div class="segmented" id="artistToggle">
+        <button class="active" data-tier="standard">Standard muralist</button>
+        <button data-tier="premium">High-profile artist</button>
+      </div>
+
+      <div class="price-hero">
+        <div class="price-label">Estimated cost</div>
+        <div class="price-amount" id="priceAmount"><span class="range" id="priceHero">$—</span></div>
+        <div class="price-sub" id="priceSub">For a standard muralist in your area</div>
+      </div>
+
+      <div class="alt-price" id="altPrice">
+        <span class="alt-price-label" id="altLabel">With a high-profile artist:</span>
+        <span class="alt-price-value" id="altValue">$—</span>
+      </div>
+
+      <button class="breakdown-toggle" id="breakdownToggle" onclick="toggleBreakdown()">
+        <span>See how this is calculated</span>
+        <span class="chev">⌄</span>
+      </button>
+      <div class="breakdown" id="breakdown">
+        <div class="breakdown-row"><span class="label">Wall size</span><span class="value" id="bdSize">— sq ft</span></div>
+        <div class="breakdown-row"><span class="label">Complexity</span><span class="value" id="bdComplexity">—</span></div>
+        <div class="breakdown-row"><span class="label">Region</span><span class="value" id="bdRegion">—</span></div>
+        <div class="breakdown-row"><span class="label">Base rate</span><span class="value" id="bdRate">$—/sq ft</span></div>
+      </div>
+
+      <h2 style="margin-top: 8px;">What now?</h2>
+      <div class="conversion-cards">
+        <div class="conv-card" onclick="convAction('proposal')">
+          <div class="conv-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+          </div>
+          <div class="conv-text">
+            <div class="conv-title">Send as proposal</div>
+            <div class="conv-sub">Branded PDF to text or email your client</div>
+          </div>
+          <span class="conv-arrow">›</span>
+        </div>
+        <div class="conv-card" onclick="convAction('find')">
+          <div class="conv-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+          </div>
+          <div class="conv-text">
+            <div class="conv-title">Find a muralist near me</div>
+            <div class="conv-sub">Connect with a working artist in your area</div>
+          </div>
+          <span class="conv-arrow">›</span>
+        </div>
+        <div class="conv-card" onclick="convAction('save')">
+          <div class="conv-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path></svg>
+          </div>
+          <div class="conv-text">
+            <div class="conv-title">Save this estimate</div>
+            <div class="conv-sub">Email it to yourself for later</div>
+          </div>
+          <span class="conv-arrow">›</span>
+        </div>
+      </div>
+
+      <div class="note">
+        Pricing is based on current US market data, updated continuously. Actual quotes from individual muralists may vary.
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn secondary" onclick="resetAndGo()">Start over</button>
+    </div>
+  </section>
+
+  <!-- Loading overlay -->
+  <div class="loading-overlay" id="loadingOverlay">
+    <div class="spinner"></div>
+    <div class="loading-text">Pricing your mural...</div>
+  </div>
+
+</div>
+
+<script>
+const state = {
+  wallImg: null, muralImg: null,
+  wallWidth: null, wallHeight: null,
+  scale: 0.75, opacity: 0.85, posX: 0.5, posY: 0.5,
+  complexity: 'moderate', region: 't3', artist: 'standard',
+  userPickedComplexity: false,
+};
+
+const REGIONS = {
+  t1: { name: 'Tier 1 (SF/NYC/LA)', mult: 1.30 },
+  t2: { name: 'Tier 2 metros', mult: 1.10 },
+  t3: { name: 'Baseline metros', mult: 1.00 },
+  t4: { name: 'Lower-cost areas', mult: 0.75 },
+};
+
+const COMPLEXITY = {
+  simple: { rate: 20, name: 'Simple' },
+  moderate: { rate: 30, name: 'Moderate' },
+  detailed: { rate: 40, name: 'Detailed' },
+};
+
+// Haptics helper
+function tap() { if (navigator.vibrate) navigator.vibrate(8); }
+
+// Screen navigation
+function go(screen) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.querySelector('[data-screen="' + screen + '"]').classList.add('active');
+  document.querySelector('[data-screen="' + screen + '"]').scrollTop = 0;
+  if (screen === 'preview') drawPreview();
+  if (screen === 'details') runComplexitySuggestion();
+}
+
+function setError(id, msg) {
+  document.getElementById(id).textContent = msg || '';
+}
+
+function validateAndGo(from, to) {
+  if (from === 'wall') {
+    setError('wallErr', ''); setError('dimErr', '');
+    const w = parseFloat(document.getElementById('wallWidth').value);
+    const h = parseFloat(document.getElementById('wallHeight').value);
+    const wEl = document.getElementById('wallWidth');
+    const hEl = document.getElementById('wallHeight');
+    wEl.classList.remove('error'); hEl.classList.remove('error');
+    let ok = true;
+    if (!state.wallImg) { setError('wallErr', 'Add a wall photo to continue.'); ok = false; }
+    if (!w || w <= 0) { wEl.classList.add('error'); ok = false; }
+    if (!h || h <= 0) { hEl.classList.add('error'); ok = false; }
+    if (!ok && (!w || !h)) setError('dimErr', 'Enter both wall dimensions in feet.');
+    if (!ok) return;
+    state.wallWidth = w; state.wallHeight = h;
+  }
+  if (from === 'mural') {
+    setError('muralErr', '');
+    if (!state.muralImg) { setError('muralErr', 'Add an image to continue.'); return; }
+  }
+  tap();
+  go(to);
+}
+
+// Image upload handlers
+function setupUpload(zoneId, fileId, imgId, stateKey) {
+  const zone = document.getElementById(zoneId);
+  const fileInput = document.getElementById(fileId);
+  const imgEl = document.getElementById(imgId);
+  fileInput.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      imgEl.src = ev.target.result;
+      zone.classList.add('filled');
+      const img = new Image();
+      img.onload = () => { state[stateKey] = img; tap(); };
+      img.src = ev.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+setupUpload('wallZone', 'wallFile', 'wallImg', 'wallImg');
+setupUpload('muralZone', 'muralFile', 'muralImg', 'muralImg');
+
+// Preview canvas drawing
+function drawPreview() {
+  const canvas = document.getElementById('previewCanvas');
+  if (!state.wallImg || !state.muralImg) return;
+  const wall = state.wallImg;
+  const mural = state.muralImg;
+  const maxW = 800;
+  const scale = Math.min(maxW / wall.width, 1);
+  canvas.width = wall.width * scale;
+  canvas.height = wall.height * scale;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(wall, 0, 0, canvas.width, canvas.height);
+  const muralW = canvas.width * state.scale;
+  const muralH = muralW * (mural.height / mural.width);
+  const x = (canvas.width - muralW) * state.posX;
+  const y = (canvas.height - muralH) * state.posY;
+  ctx.globalAlpha = state.opacity;
+  ctx.drawImage(mural, x, y, muralW, muralH);
+  ctx.globalAlpha = 1;
+}
+
+// Slider bindings with filled progress
+function bindSlider(id, valId, stateKey, formatter) {
+  const slider = document.getElementById(id);
+  const valEl = document.getElementById(valId);
+  const updateFill = () => slider.style.setProperty('--fill', slider.value + '%');
+  updateFill();
+  slider.addEventListener('input', () => {
+    const v = slider.value / 100;
+    state[stateKey] = v;
+    valEl.textContent = formatter(slider.value);
+    updateFill();
+    drawPreview();
+  });
+}
+bindSlider('scaleSlider', 'scaleVal', 'scale', v => v + '%');
+bindSlider('opacitySlider', 'opacityVal', 'opacity', v => v + '%');
+bindSlider('xSlider', 'xVal', 'posX', v => v == 50 ? 'center' : (v < 50 ? 'left ' + (50-v) : 'right ' + (v-50)));
+bindSlider('ySlider', 'yVal', 'posY', v => v == 50 ? 'center' : (v < 50 ? 'up ' + (50-v) : 'down ' + (v-50)));
+
+function resetPreview() {
+  state.scale = 0.75; state.opacity = 0.85; state.posX = 0.5; state.posY = 0.5;
+  ['scaleSlider','opacitySlider','xSlider','ySlider'].forEach((id, i) => {
+    const el = document.getElementById(id);
+    el.value = [75, 85, 50, 50][i];
+    el.dispatchEvent(new Event('input'));
+  });
+}
+
+// Tier picker
+function setupTierGrid(gridId, stateKey, onPick) {
+  const grid = document.getElementById(gridId);
+  grid.querySelectorAll('.tier-card').forEach(card => {
+    card.addEventListener('click', () => {
+      grid.querySelectorAll('.tier-card').forEach(c => c.classList.remove('selected'));
+      card.classList.add('selected');
+      state[stateKey] = card.dataset.value;
+      tap();
+      if (onPick) onPick(card.dataset.value);
+    });
+  });
+}
+setupTierGrid('complexityGrid', 'complexity', () => { state.userPickedComplexity = true; });
+
+// Artist segmented toggle on price screen
+function setupArtistToggle() {
+  const toggle = document.getElementById('artistToggle');
+  toggle.querySelectorAll('button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      toggle.querySelectorAll('button').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      state.artist = btn.dataset.tier;
+      tap();
+      updatePriceDisplay();
+    });
+  });
+}
+setupArtistToggle();
+
+// Region selector
+document.getElementById('regionSelect').addEventListener('change', (e) => {
+  state.region = e.target.value;
+});
+
+// Auto-suggest complexity (placeholder — real version uses iOS Vision)
+function runComplexitySuggestion() {
+  ['sugSimple','sugModerate','sugDetailed'].forEach(id => document.getElementById(id).style.display = 'none');
+  if (!state.muralImg) return;
+  const aspect = state.muralImg.width / state.muralImg.height;
+  let suggested = (aspect > 1.5 || aspect < 0.6) ? 'simple' : 'moderate';
+  const sugId = 'sug' + suggested.charAt(0).toUpperCase() + suggested.slice(1);
+  document.getElementById(sugId).style.display = 'inline-block';
+  if (!state.userPickedComplexity) {
+    state.complexity = suggested;
+    const grid = document.getElementById('complexityGrid');
+    grid.querySelectorAll('.tier-card').forEach(c => {
+      c.classList.toggle('selected', c.dataset.value === suggested);
+    });
+  }
+}
+
+// Price calculation with loading state
+let calculatedPrices = null;
+
+function calculatePrice() {
+  tap();
+  document.getElementById('loadingOverlay').classList.add('show');
+  setTimeout(() => {
+    const sqft = state.wallWidth * state.wallHeight;
+    const region = REGIONS[state.region];
+    const complexity = COMPLEXITY[state.complexity];
+    const baseStandard = complexity.rate * region.mult * sqft;
+    calculatedPrices = {
+      standardLow: Math.round(baseStandard * 0.9 / 100) * 100,
+      standardHigh: Math.round(baseStandard * 1.1 / 100) * 100,
+      premiumLow: Math.round(baseStandard * 2.0 / 100) * 100,
+      premiumHigh: Math.round(baseStandard * 4.0 / 100) * 100,
+      sqft, region, complexity,
+    };
+    updatePriceDisplay();
+    document.getElementById('bdSize').textContent = sqft.toLocaleString() + ' sq ft (' + state.wallWidth + ' × ' + state.wallHeight + ' ft)';
+    document.getElementById('bdComplexity').textContent = complexity.name;
+    document.getElementById('bdRegion').textContent = region.name;
+    document.getElementById('bdRate').textContent = '$' + (complexity.rate * region.mult).toFixed(2) + '/sq ft';
+    document.getElementById('loadingOverlay').classList.remove('show');
+    go('price');
+    if (navigator.vibrate) navigator.vibrate([10, 40, 10]);
+  }, 700);
+}
+
+function updatePriceDisplay() {
+  if (!calculatedPrices) return;
+  const p = calculatedPrices;
+  const heroEl = document.getElementById('priceAmount');
+  // Restart animation
+  heroEl.style.animation = 'none';
+  void heroEl.offsetWidth;
+  heroEl.style.animation = '';
+  if (state.artist === 'standard') {
+    document.getElementById('priceHero').textContent = '$' + p.standardLow.toLocaleString() + ' - $' + p.standardHigh.toLocaleString();
+    document.getElementById('priceSub').textContent = 'For a standard muralist in your area';
+    document.getElementById('altLabel').textContent = 'With a high-profile artist:';
+    document.getElementById('altValue').textContent = '$' + p.premiumLow.toLocaleString() + ' - $' + p.premiumHigh.toLocaleString();
+  } else {
+    document.getElementById('priceHero').textContent = '$' + p.premiumLow.toLocaleString() + ' - $' + p.premiumHigh.toLocaleString();
+    document.getElementById('priceSub').textContent = 'For a high-profile artist';
+    document.getElementById('altLabel').textContent = 'With a standard muralist:';
+    document.getElementById('altValue').textContent = '$' + p.standardLow.toLocaleString() + ' - $' + p.standardHigh.toLocaleString();
+  }
+}
+
+function toggleBreakdown() {
+  document.getElementById('breakdown').classList.toggle('open');
+  document.getElementById('breakdownToggle').classList.toggle('open');
+}
+
+function convAction(type) {
+  const messages = {
+    proposal: 'In the real app: generates a branded PDF with the mockup, price, scope, and your contact info. Ready to text or email your client. This is a Pro feature.',
+    find: 'In the real app: shows muralists in your area with portfolios, ratings, and contact buttons. Routes lead to the artist directly.',
+    save: 'In the real app: emails this estimate to you with a link to come back and edit it.',
+  };
+  alert(messages[type]);
+}
+
+function resetAndGo() {
+  if (!confirm('Start a new project? This will clear the current one.')) return;
+  state.wallImg = null; state.muralImg = null;
+  state.wallWidth = null; state.wallHeight = null;
+  state.scale = 0.75; state.opacity = 0.85; state.posX = 0.5; state.posY = 0.5;
+  state.complexity = 'moderate'; state.region = 't3'; state.artist = 'standard';
+  state.userPickedComplexity = false;
+  document.getElementById('wallZone').classList.remove('filled');
+  document.getElementById('muralZone').classList.remove('filled');
+  document.getElementById('wallWidth').value = '';
+  document.getElementById('wallHeight').value = '';
+  document.getElementById('wallFile').value = '';
+  document.getElementById('muralFile').value = '';
+  document.getElementById('regionSelect').value = 't3';
+  setError('wallErr', ''); setError('dimErr', ''); setError('muralErr', '');
+  document.getElementById('breakdown').classList.remove('open');
+  document.getElementById('breakdownToggle').classList.remove('open');
+  document.getElementById('artistToggle').querySelectorAll('button').forEach((b, i) => b.classList.toggle('active', i === 0));
+  go('splash');
+}
+</script>
+</body>
+</html>
